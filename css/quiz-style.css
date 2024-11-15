@@ -160,51 +160,43 @@
 
 .mole-container {
     max-width: 600px;
-    margin: 2rem auto;
-    padding: 1rem;
+    background: #f7f7f7;
+    border-radius: 30px;
+    margin: 0 auto;
 }
 
 .mole-row {
     display: flex;
     justify-content: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
 }
 
 .mole-hole {
     width: 100px;
     height: 100px;
-    background: #654321;
-    border-radius: 50%;
+    background: url(../assets/blank.png) center center no-repeat;
+    background-size: contain;
     position: relative;
     overflow: hidden;
 }
 
 .mole {
-    width: 90px;
-    height: 90px;
-    background: #8B4513;
-    border-radius: 50%;
+    width: 100px;
+    height: 100px;
+    background: url(../assets/fill.png) center center no-repeat;
+    background-size: contain;
     position: absolute;
     top: 100%;
-    left: 5px;
+    left: 50%;
+    transform: translateX(-50%);
     transition: top 0.1s;
     cursor: pointer;
+    max-width: 100%;
 }
 
-.mole::after {
-    content: '';
-    position: absolute;
-    top: 10px;
-    left: 25px;
-    width: 40px;
-    height: 40px;
-    background: #654321;
-    border-radius: 50%;
-}
+
 
 .mole.active {
-    top: 5px;
+    top: 0;
 }
 
 .splash {

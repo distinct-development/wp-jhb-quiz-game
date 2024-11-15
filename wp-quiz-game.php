@@ -280,7 +280,7 @@ function wp_jhb_quiz_shortcode() {
             <!-- Quiz content will be dynamically inserted here -->
         </div>
         <div id="bonus-game-screen" class="quiz-screen">
-            <h2>Bonus Round: Whack-a-Wapu!</h2>
+            <h2>Bonus Round: Whack-a-Wapuu!</h2>
             <div class="bonus-info">
                 <div id="bonus-timer">Time: 30s</div>
                 <div id="bonus-score">Bonus Score: 0</div>
@@ -290,13 +290,22 @@ function wp_jhb_quiz_shortcode() {
                     <div class="mole-hole"><div class="mole"></div></div>
                     <div class="mole-hole"><div class="mole"></div></div>
                     <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole"><div class="mole"></div></div>
+                </div>
+                <div class="mole-row">
+                    <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole"><div class="mole"></div></div>
                 </div>
                 <div class="mole-row">
                     <div class="mole-hole"><div class="mole"></div></div>
                     <div class="mole-hole"><div class="mole"></div></div>
                     <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole"><div class="mole"></div></div>
                 </div>
                 <div class="mole-row">
+                    <div class="mole-hole"><div class="mole"></div></div>
                     <div class="mole-hole"><div class="mole"></div></div>
                     <div class="mole-hole"><div class="mole"></div></div>
                     <div class="mole-hole"><div class="mole"></div></div>

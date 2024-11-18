@@ -316,6 +316,7 @@ function wp_jhb_quiz_shortcode() {
             <h2>Game Complete!</h2>
             <div id="final-score"></div>
             <button id="restart-quiz" class="quiz-button">Play Again</button>
+            <a href="https://staging.distinct.africa/wpjoburg/leaderboard/">View Leaderboard</a>
         </div>
     </div>
     <?php

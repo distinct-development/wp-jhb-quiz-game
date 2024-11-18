@@ -12,11 +12,48 @@ document.addEventListener("DOMContentLoaded", function () {
   let bonusTimerInterval;
   let moleInterval;
   let activeMole = null;
+  let randomizedQuestions = [];
 
   const startScreen = document.getElementById("quiz-start-screen");
   const gameScreen = document.getElementById("quiz-game-screen");
   const endScreen = document.getElementById("quiz-end-screen");
   const bonusScreen = document.getElementById("bonus-game-screen");
+
+    // Function to shuffle array (Fisher-Yates algorithm)
+  function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  // Function to randomize questions and their options
+  function randomizeQuestions() {
+    randomizedQuestions = wpQuizGame.questions.map(q => {
+      // Create a copy of the question object
+      const randomQ = { ...q };
+      
+      // Get all options with their correct index
+      const optionsWithIndex = q.options.map((opt, idx) => ({
+        text: opt,
+        isCorrect: idx === q.correct
+      }));
+      
+      // Shuffle options
+      const shuffledOptions = shuffleArray([...optionsWithIndex]);
+      
+      // Update the question object with shuffled options
+      randomQ.options = shuffledOptions.map(opt => opt.text);
+      // Update correct answer index based on new option positions
+      randomQ.correct = shuffledOptions.findIndex(opt => opt.isCorrect);
+      
+      return randomQ;
+    });
+    
+    // Shuffle the questions themselves
+    return shuffleArray(randomizedQuestions);
+  }
 
   // Start Quiz Button Handler
   document.getElementById("start-quiz").addEventListener("click", function () {
@@ -28,6 +65,7 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    randomizeQuestions();
     startGame();
   });
 
@@ -42,7 +80,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function loadQuestion() {
-    const question = wpQuizGame.questions[currentQuestion];
+    const question = randomizedQuestions[currentQuestion];
 
     const markup = `
           <div class="quiz-header">
@@ -52,7 +90,7 @@ document.addEventListener("DOMContentLoaded", function () {
           </div>
           <div class="progress-bar">
               <div class="progress" style="width: ${
-                ((currentQuestion + 1) / wpQuizGame.questions.length) * 100
+                ((currentQuestion + 1) / randomizedQuestions.length) * 100
               }%"></div>
           </div>
           <div class="question">
@@ -110,7 +148,7 @@ document.addEventListener("DOMContentLoaded", function () {
     isAnswered = true;
     clearInterval(timerInterval);
 
-    const question = wpQuizGame.questions[currentQuestion];
+    const question = randomizedQuestions[currentQuestion];
     const options = document.querySelectorAll(".option");
 
     options[question.correct].classList.add("correct");
@@ -124,7 +162,7 @@ document.addEventListener("DOMContentLoaded", function () {
       lives--;
 
       if (lives <= 0) {
-        endGame(false); // End game without bonus round if lives are depleted
+        endGame(false);
         return;
       }
     }
@@ -133,13 +171,13 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function moveToNextQuestion() {
-    if (currentQuestion < wpQuizGame.questions.length - 1) {
+    if (currentQuestion < randomizedQuestions.length - 1) {
       currentQuestion++;
       isAnswered = false;
       loadQuestion();
       startTimer();
     } else {
-      endGame(true); // Successfully completed all questions, include bonus round
+      endGame(true);
     }
   }
   // Bonus Game Functions
@@ -148,14 +186,12 @@ document.addEventListener("DOMContentLoaded", function () {
     gameScreen.classList.remove("active");
     bonusScreen.classList.add("active");
 
-    // Initialize bonus game with shorter timer
     bonusScore = 0;
-    bonusTimer = 15; // Reduced from 30 to 15 seconds
+    bonusTimer = 15;
     updateBonusUI();
     startBonusTimer();
     startMoleAnimation();
 
-    // Add click handlers to moles
     document.querySelectorAll(".mole").forEach((mole) => {
       mole.addEventListener("click", handleMoleClick);
     });
@@ -183,10 +219,8 @@ document.addEventListener("DOMContentLoaded", function () {
   function startMoleAnimation() {
     if (moleInterval) clearInterval(moleInterval);
 
-    const NUM_ACTIVE_MOLES = 2; // Show 2 moles at a time
-    const MOLE_DURATION = 800; // Moles stay up for 800ms (reduced from 1000ms)
-    const MOLE_INTERVAL = 900; // New moles appear every 900ms (reduced from 1200ms)
-
+    const MOLE_DURATION = 800;
+    const MOLE_INTERVAL = 900;
     let activeMoles = new Set();
 
     moleInterval = setInterval(() => {
@@ -198,13 +232,14 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
 
+      // Randomly determine number of active moles (1-3)
+      const NUM_ACTIVE_MOLES = Math.floor(Math.random() * 3) + 1;
+
       // Add new moles until we have NUM_ACTIVE_MOLES
       const moles = Array.from(document.querySelectorAll(".mole"));
       while (activeMoles.size < NUM_ACTIVE_MOLES) {
-        // Find an inactive mole
         const availableMoles = moles.filter(
-          (mole) =>
-            !Array.from(activeMoles).some((active) => active.element === mole)
+          (mole) => !Array.from(activeMoles).some((active) => active.element === mole)
         );
 
         if (availableMoles.length === 0) break;
@@ -218,7 +253,6 @@ document.addEventListener("DOMContentLoaded", function () {
           timestamp: Date.now(),
         });
 
-        // Set auto-hide timeout for this mole
         setTimeout(() => {
           newMole.classList.remove("active");
           activeMoles.delete(
@@ -294,6 +328,7 @@ document.addEventListener("DOMContentLoaded", function () {
     lives = 3;
     timer = 20;
     isAnswered = false;
+    randomizedQuestions = [];
 
     clearInterval(timerInterval);
     clearInterval(bonusTimerInterval);

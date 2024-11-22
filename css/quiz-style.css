@@ -73,11 +73,6 @@
     text-align: left;
 }
 
-.option:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
-}
-
 .option.correct {
     background: #28a745;
     color: white;

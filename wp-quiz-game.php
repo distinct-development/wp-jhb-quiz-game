@@ -218,17 +218,17 @@ function wp_jhb_leaderboard_shortcode() {
     ob_start();
     ?>
     <div class="wp-quiz-leaderboard">
-        <h2>Quiz Leaderboard</h2>
+        <h2>WordPress Quiz Leaderboard</h2>
         <div class="leaderboard-table-container">
             <table class="leaderboard-table">
                 <thead>
                     <tr>
                         <th>Rank</th>
                         <th>Player</th>
-                        <th>Highest Score</th>
-                        <th>Average Score</th>
-                        <th>Recent Score</th>
-                        <th>Total Attempts</th>
+                        <th>High Score</th>
+                        <th>Average</th>
+                        <th>Recent</th>
+                        <th>Attempts</th>
                         <th>Last Played</th>
                     </tr>
                 </thead>
@@ -269,12 +269,14 @@ function wp_jhb_quiz_shortcode() {
     ?>
     <div id="wp-quiz-game-container" class="wp-quiz-container">
         <div id="quiz-start-screen" class="quiz-screen active">
-            <h2>WordPress Knowledge Quiz</h2>
+            <h2>WordPress Quiz</h2>
             <div class="name-inputs">
                 <input type="text" id="first-name" placeholder="First Name" />
                 <input type="text" id="last-name" placeholder="Last Name" />
             </div>
-            <button id="start-quiz" class="quiz-button">Start Quiz</button>
+            <p class="description">Your name and surname are used to uniquely identify you and are displayed publically on the <a href="<?php echo site_url('/leaderboard/'); ?>">quiz leaderboard</a>.</p>
+            <button id="start-quiz" class="quiz-button">Begin</button><br><br>
+            <a href="<?php echo site_url('/leaderboard/'); ?>">View Leaderboard</a>
         </div>
         <div id="quiz-game-screen" class="quiz-screen">
             <!-- Quiz content will be dynamically inserted here -->
@@ -315,8 +317,8 @@ function wp_jhb_quiz_shortcode() {
         <div id="quiz-end-screen" class="quiz-screen">
             <h2>Game Complete!</h2>
             <div id="final-score"></div>
-            <button id="restart-quiz" class="quiz-button">Play Again</button>
-            <a href="https://staging.distinct.africa/wpjoburg/leaderboard/">View Leaderboard</a>
+            <button id="restart-quiz" class="quiz-button">Play Again</button><br><br>
+            <a href="<?php echo site_url('/leaderboard/'); ?>">View Leaderboard</a>
         </div>
     </div>
     <?php

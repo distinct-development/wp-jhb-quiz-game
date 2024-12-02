@@ -192,15 +192,66 @@ function get_quiz_questions() {
     );
 }
 
+
+
+function wp_jhb_quiz_settings_page() {
+    // Get current setting
+    $current_range = get_option('wp_jhb_quiz_leaderboard_range', 'all');
+    ?>
+    <div class="wrap">
+        <h1>Leaderboard Settings</h1>
+        <form method="post" action="options.php">
+            <?php settings_fields('wp_jhb_quiz_options'); ?>
+            <table class="form-table">
+                <tr>
+                    <th scope="row">Leaderboard Date Range</th>
+                    <td>
+                        <select name="wp_jhb_quiz_leaderboard_range">
+                            <option value="day" <?php selected($current_range, 'day'); ?>>Today Only</option>
+                            <option value="week" <?php selected($current_range, 'week'); ?>>This Week</option>
+                            <option value="month" <?php selected($current_range, 'month'); ?>>This Month</option>
+                            <option value="all" <?php selected($current_range, 'all'); ?>>All Time</option>
+                        </select>
+                        <p class="description">Select the time period for which the leaderboard should display scores.</p>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button(); ?>
+        </form>
+    </div>
+    <?php
+}
+
+
+
+// Modify the leaderboard query to respect the date range setting
+function wp_jhb_quiz_get_date_range_condition() {
+    $range = get_option('wp_jhb_quiz_leaderboard_range', 'all');
+    $current_time = current_time('mysql');
+    
+    switch ($range) {
+        case 'day':
+            return "DATE(last_attempt_time) = DATE('$current_time')";
+        case 'week':
+            return "YEARWEEK(last_attempt_time) = YEARWEEK('$current_time')";
+        case 'month':
+            return "YEAR(last_attempt_time) = YEAR('$current_time') AND MONTH(last_attempt_time) = MONTH('$current_time')";
+        default:
+            return "1=1"; // All time
+    }
+}
+
 // Add shortcodes for quiz and leaderboard
 add_shortcode('wp_jhb_quiz', 'wp_jhb_quiz_shortcode');
 add_shortcode('wp_jhb_leaderboard', 'wp_jhb_leaderboard_shortcode');
 
+// Update the leaderboard shortcode function
 function wp_jhb_leaderboard_shortcode() {
     global $wpdb;
     $stats_table = $wpdb->prefix . 'quiz_player_stats';
+    $date_condition = wp_jhb_quiz_get_date_range_condition();
     
-    // Get top 20 players by highest score
+    // Get top 20 players by highest score within the selected date range
     $leaderboard = $wpdb->get_results(
         "SELECT 
             first_name,
@@ -211,14 +262,22 @@ function wp_jhb_leaderboard_shortcode() {
             total_attempts,
             last_attempt_time
         FROM $stats_table 
-        ORDER BY highest_score DESC, average_score DESC 
-        LIMIT 20"
+        WHERE $date_condition
+        ORDER BY highest_score DESC, average_score DESC"
     );
+    
+    // Get the current range setting for display
+    $range_text = array(
+        'day' => 'Today',
+        'week' => 'This Week',
+        'month' => 'This Month',
+        'all' => 'All Time'
+    )[get_option('wp_jhb_quiz_leaderboard_range', 'all')];
     
     ob_start();
     ?>
     <div class="wp-quiz-leaderboard">
-        <h2>WordPress Quiz Leaderboard</h2>
+        <h2>WordPress Quiz Leaderboard (<?php echo esc_html($range_text); ?>)</h2>
         <div class="leaderboard-table-container">
             <table class="leaderboard-table">
                 <thead>
@@ -233,29 +292,35 @@ function wp_jhb_leaderboard_shortcode() {
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($leaderboard as $index => $player): ?>
+                    <?php if (empty($leaderboard)): ?>
                         <tr>
-                            <td class="rank"><?php echo $index + 1; ?></td>
-                            <td class="player-name">
-                                <?php echo esc_html($player->first_name . ' ' . $player->last_name); ?>
-                            </td>
-                            <td class="highest-score">
-                                <?php echo number_format($player->highest_score); ?>
-                            </td>
-                            <td class="average-score">
-                                <?php echo number_format($player->average_score, 1); ?>
-                            </td>
-                            <td class="recent-score">
-                                <?php echo number_format($player->last_attempt_score); ?>
-                            </td>
-                            <td class="attempts">
-                                <?php echo number_format($player->total_attempts); ?>
-                            </td>
-                            <td class="last-played">
-                                <?php echo human_time_diff(strtotime($player->last_attempt_time), current_time('timestamp')); ?> ago
-                            </td>
+                            <td colspan="7" class="text-center">No scores recorded for this time period yet.</td>
                         </tr>
-                    <?php endforeach; ?>
+                    <?php else: ?>
+                        <?php foreach ($leaderboard as $index => $player): ?>
+                            <tr>
+                                <td class="rank"><?php echo $index + 1; ?></td>
+                                <td class="player-name">
+                                    <?php echo esc_html($player->first_name . ' ' . $player->last_name); ?>
+                                </td>
+                                <td class="highest-score">
+                                    <?php echo number_format($player->highest_score); ?>
+                                </td>
+                                <td class="average-score">
+                                    <?php echo number_format($player->average_score, 1); ?>
+                                </td>
+                                <td class="recent-score">
+                                    <?php echo number_format($player->last_attempt_score); ?>
+                                </td>
+                                <td class="attempts">
+                                    <?php echo number_format($player->total_attempts); ?>
+                                </td>
+                                <td class="last-played">
+                                    <?php echo human_time_diff(strtotime($player->last_attempt_time), current_time('timestamp')); ?> ago
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -395,7 +460,9 @@ function wp_jhb_quiz_save_stats() {
 // Add admin menu
 add_action('admin_menu', 'wp_jhb_quiz_admin_menu');
 
+// Modify the existing admin menu function
 function wp_jhb_quiz_admin_menu() {
+    // Add main menu page
     add_menu_page(
         'WordPress JHB Quiz',
         'JHB Quiz',
@@ -404,6 +471,19 @@ function wp_jhb_quiz_admin_menu() {
         'wp_jhb_quiz_admin_page',
         'dashicons-games'
     );
+
+    // Add settings submenu
+    add_submenu_page(
+        'wp-jhb-quiz',                // Parent slug
+        'Leaderboard Settings',       // Page title
+        'Settings',                   // Menu title
+        'manage_options',             // Capability
+        'wp-jhb-quiz-settings',       // Menu slug
+        'wp_jhb_quiz_settings_page'   // Function
+    );
+
+    // Register settings
+    register_setting('wp_jhb_quiz_options', 'wp_jhb_quiz_leaderboard_range');
 }
 
 function wp_jhb_quiz_admin_page() {

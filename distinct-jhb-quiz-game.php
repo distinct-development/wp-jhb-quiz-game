@@ -2,16 +2,18 @@
 /*
 Plugin Name: Joburg Meet-up Quiz
 Description: An interactive quiz plugin with leaderboard functionality
-Version: 1.1.0
+Version: 1.2.0
 Author: Distinct
 Author URI: https://distinct.africa
 Requires at least: 6.0
 Tested up to: 6.7.1
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 Requires PHP: 7.4
 License: GPL-2.0+
 License URI: http://www.gnu.org/licenses/gpl-2.0.txt
 */
+
+require_once plugin_dir_path(__FILE__) . 'admin/quiz-questions.php';
 
 // Prevent direct access to this file
 if (!defined('ABSPATH')) {
@@ -23,6 +25,15 @@ register_activation_hook(__FILE__, 'distinct_jhb_quiz_activate');
 
 function distinct_jhb_quiz_activate()
 {
+
+    function distinct_jhb_quiz_init_settings() {
+        add_option('distinct_jhb_quiz_question_timer', 20);
+        add_option('distinct_jhb_quiz_bonus_timer', 30);
+        add_option('distinct_jhb_quiz_bonus_score', 10);
+        add_option('distinct_jhb_quiz_lives', 3);
+    }
+    register_activation_hook(__FILE__, 'distinct_jhb_quiz_init_settings');
+
     global $wpdb;
     $charset_collate = $wpdb->get_charset_collate();
 
@@ -96,152 +107,48 @@ function distinct_jhb_quiz_enqueue_scripts()
         true
     );
 
-    // Pass data to JavaScript
+    // Pass data to JavaScript with new settings
     wp_localize_script('distinct-jhb-quiz-script', 'wpQuizGame', array(
         'ajaxurl' => admin_url('admin-ajax.php'),
         'nonce' => wp_create_nonce('distinct_jhb_quiz_nonce'),
-        'questions' => get_quiz_questions()
+        'questions' => get_quiz_questions(),
+        'settings' => array(
+            'questionTimer' => get_option('distinct_jhb_quiz_question_timer', 20),
+            'bonusTimer' => get_option('distinct_jhb_quiz_bonus_timer', 30),
+            'bonusScore' => get_option('distinct_jhb_quiz_bonus_score', 10),
+            'lives' => get_option('distinct_jhb_quiz_lives', 3)
+        )
     ));
 }
 
-// Get quiz questions
-function get_quiz_questions()
-{
-    return array(
-        array(
-            'question' => 'What is WordPress primarily used for?',
-            'options' => array(
-                'Online Shopping',
-                'Website Creation',
-                'Video Editing',
-                'Email Marketing'
-            ),
-            'correct' => 1
-        ),
-        array(
-            'question' => 'What year was WordPress first released?',
-            'options' => array(
-                '2001',
-                '2003',
-                '2005',
-                '2007'
-            ),
-            'correct' => 1
-        ),
-        array(
-            'question' => 'Which of these is NOT a WordPress post type?',
-            'options' => array(
-                'Blog Post',
-                'Page',
-                'Email',
-                'Media'
-            ),
-            'correct' => 2
-        ),
-        array(
-            'question' => 'What\'s the name of the latest WordPress editor?',
-            'options' => array(
-                'Classic Editor',
-                'Gutenberg',
-                'Visual Composer',
-                'Page Builder'
-            ),
-            'correct' => 1
-        ),
-        array(
-            'question' => 'What is the Yoast SEO plugin primarily used for in WordPress?',
-            'options' => array(
-                'Managing social media posts',
-                'Optimizing content for search engines',
-                'Creating backups',
-                'Managing user permissions'
-            ),
-            'correct' => 1
-        ),
-        array(
-            'question' => 'Which SEO element does the Meta Description tag influence?',
-            'options' => array(
-                'Search engine rankings directly',
-                'Website loading speed',
-                'Search result click-through rate',
-                'Website security'
-            ),
-            'correct' => 2
-        ),
-        array(
-            'question' => 'What\'s the difference between WordPress.com and WordPress.org?',
-            'options' => array(
-                'They\'re exactly the same',
-                'WordPress.com is hosted, WordPress.org is self-hosted',
-                'WordPress.org is newer',
-                'WordPress.com is offline only'
-            ),
-            'correct' => 1
-        ),
-        array(
-            'question' => 'Which of these is free on WordPress?',
-            'options' => array(
-                'Themes',
-                'Plugins',
-                'Both themes and plugins',
-                'Neither'
-            ),
-            'correct' => 2
-        ),
-        array(
-            'question' => 'What\'s a WordPress theme?',
-            'options' => array(
-                'A background color',
-                'A design template for your website',
-                'A type of post',
-                'A payment system'
-            ),
-            'correct' => 1
-        ),
-        array(
-            'question' => 'What\'s a WordPress plugin?',
-            'options' => array(
-                'A charging cable',
-                'A website backup',
-                'Extra functionality for your website',
-                'A type of theme'
-            ),
-            'correct' => 2
-        ),
-        array(
-            'question' => 'Where can you add widgets in WordPress?',
-            'options' => array(
-                'Only in posts',
-                'Only in pages',
-                'In sidebars and designated areas',
-                'Cannot add widgets'
-            ),
-            'correct' => 2
-        ),
-        array(
-            'question' => 'What\'s the WordPress dashboard used for?',
-            'options' => array(
-                'Viewing your website',
-                'Managing your website',
-                'Sending emails',
-                'Creating graphics'
-            ),
-            'correct' => 1
-        )
-    );
-}
+// Remove the general wp_enqueue_scripts action
+remove_action('wp_enqueue_scripts', 'distinct_jhb_quiz_enqueue_scripts');
 
 
 
-function distinct_jhb_quiz_settings_page()
-{
-    // Get current setting
+function distinct_jhb_quiz_settings_page() {
+    // If settings are being saved
+    if (isset($_POST['update_quiz_settings']) && check_admin_referer('distinct_jhb_quiz_settings')) {
+        update_option('distinct_jhb_quiz_leaderboard_range', sanitize_text_field($_POST['distinct_jhb_quiz_leaderboard_range']));
+        update_option('distinct_jhb_quiz_question_timer', absint($_POST['distinct_jhb_quiz_question_timer']));
+        update_option('distinct_jhb_quiz_bonus_timer', absint($_POST['distinct_jhb_quiz_bonus_timer']));
+        update_option('distinct_jhb_quiz_bonus_score', absint($_POST['distinct_jhb_quiz_bonus_score']));
+        update_option('distinct_jhb_quiz_lives', absint($_POST['distinct_jhb_quiz_lives']));
+        
+        echo '<div class="updated"><p>Settings saved successfully!</p></div>';
+    }
+
+    // Get current settings
     $current_range = get_option('distinct_jhb_quiz_leaderboard_range', 'all');
-?>
+    $question_timer = get_option('distinct_jhb_quiz_question_timer', 20);
+    $bonus_timer = get_option('distinct_jhb_quiz_bonus_timer', 30);
+    $bonus_score = get_option('distinct_jhb_quiz_bonus_score', 10);
+    $lives = get_option('distinct_jhb_quiz_lives', 3);
+    ?>
     <div class="wrap">
-        <h1>Leaderboard Settings</h1>
-        <form method="post" action="options.php">
-            <?php settings_fields('distinct_jhb_quiz_options'); ?>
+        <h1>Quiz Settings</h1>
+        <form method="post" action="">
+            <?php wp_nonce_field('distinct_jhb_quiz_settings'); ?>
             <table class="form-table">
                 <tr>
                     <th scope="row">Leaderboard Date Range</th>
@@ -255,12 +162,48 @@ function distinct_jhb_quiz_settings_page()
                         <p class="description">Select the time period for which the leaderboard should display scores.</p>
                     </td>
                 </tr>
+                <tr>
+                    <th scope="row">Question Timer (seconds)</th>
+                    <td>
+                        <input type="number" name="distinct_jhb_quiz_question_timer" 
+                               value="<?php echo esc_attr($question_timer); ?>" min="5" max="60" />
+                        <p class="description">How many seconds players have to answer each question.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Bonus Game Timer (seconds)</th>
+                    <td>
+                        <input type="number" name="distinct_jhb_quiz_bonus_timer" 
+                               value="<?php echo esc_attr($bonus_timer); ?>" min="10" max="60" />
+                        <p class="description">Duration of the Whack-a-Wapuu bonus game.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Bonus Score Per Hit</th>
+                    <td>
+                        <input type="number" name="distinct_jhb_quiz_bonus_score" 
+                               value="<?php echo esc_attr($bonus_score); ?>" min="1" max="50" />
+                        <p class="description">Points awarded for each successful Wapuu hit.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Player Lives</th>
+                    <td>
+                        <input type="number" name="distinct_jhb_quiz_lives" 
+                               value="<?php echo esc_attr($lives); ?>" min="1" max="5" />
+                        <p class="description">Number of lives players start with.</p>
+                    </td>
+                </tr>
             </table>
-            <?php submit_button(); ?>
+            <p class="submit">
+                <input type="submit" name="update_quiz_settings" class="button-primary" 
+                       value="<?php _e('Save Settings', 'distinct-jhb-quiz'); ?>" />
+            </p>
         </form>
     </div>
-<?php
+    <?php
 }
+
 
 
 
@@ -356,6 +299,18 @@ function distinct_jhb_leaderboard_shortcode()
         'all' => 'All Time'
     )[get_option('distinct_jhb_quiz_leaderboard_range', 'all')];
 
+    // Enqueue scripts only when shortcode is used
+    $plugin_data = get_file_data(__FILE__, array('Version' => 'Version'), 'plugin');
+    $version = $plugin_data['Version'] ? $plugin_data['Version'] : '1.0';
+
+    wp_enqueue_style(
+        'distinct-jhb-quiz-style',
+        plugins_url('css/quiz-style.css', __FILE__),
+        array(),
+        $version
+    );
+    
+
     ob_start();
 ?>
     <div class="wp-quiz-leaderboard">
@@ -413,6 +368,38 @@ function distinct_jhb_leaderboard_shortcode()
 
 function distinct_jhb_quiz_shortcode()
 {
+    // Enqueue scripts only when shortcode is used
+    $plugin_data = get_file_data(__FILE__, array('Version' => 'Version'), 'plugin');
+    $version = $plugin_data['Version'] ? $plugin_data['Version'] : '1.0';
+
+    wp_enqueue_style(
+        'distinct-jhb-quiz-style',
+        plugins_url('css/quiz-style.css', __FILE__),
+        array(),
+        $version
+    );
+
+    wp_enqueue_script(
+        'distinct-jhb-quiz-script',
+        plugins_url('js/quiz-script.js', __FILE__),
+        array('jquery'),
+        $version,
+        true
+    );
+
+    // Pass data to JavaScript with all settings
+    wp_localize_script('distinct-jhb-quiz-script', 'wpQuizGame', array(
+        'ajaxurl' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('distinct_jhb_quiz_nonce'),
+        'questions' => get_quiz_questions(),
+        'settings' => array(
+            'questionTimer' => get_option('distinct_jhb_quiz_question_timer', 20),
+            'bonusTimer' => get_option('distinct_jhb_quiz_bonus_timer', 30),
+            'bonusScore' => get_option('distinct_jhb_quiz_bonus_score', 10),
+            'lives' => get_option('distinct_jhb_quiz_lives', 3)
+        )
+    ));
+    
     ob_start();
 ?>
     <div id="wp-quiz-game-container" class="wp-quiz-container">

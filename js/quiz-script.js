@@ -1,14 +1,14 @@
 document.addEventListener("DOMContentLoaded", function () {
   let currentQuestion = 0;
   let score = 0;
-  let lives = 3;
-  let timer = 20;
+  let lives = wpQuizGame.settings.lives;
+  let timer = wpQuizGame.settings.questionTimer;
   let timerInterval;
   let isAnswered = false;
   let firstName = "";
   let lastName = "";
   let bonusScore = 0;
-  let bonusTimer = 30;
+  let bonusTimer = wpQuizGame.settings.bonusTimer;
   let bonusTimerInterval;
   let moleInterval;
   let activeMole = null;
@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const endScreen = document.getElementById("quiz-end-screen");
   const bonusScreen = document.getElementById("bonus-game-screen");
 
-    // Function to shuffle array (Fisher-Yates algorithm)
+  // Function to shuffle array (Fisher-Yates algorithm)
   function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -30,27 +30,27 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Function to randomize questions and their options
   function randomizeQuestions() {
-    randomizedQuestions = wpQuizGame.questions.map(q => {
+    randomizedQuestions = wpQuizGame.questions.map((q) => {
       // Create a copy of the question object
       const randomQ = { ...q };
-      
+
       // Get all options with their correct index
       const optionsWithIndex = q.options.map((opt, idx) => ({
         text: opt,
-        isCorrect: idx === q.correct
+        isCorrect: idx === q.correct,
       }));
-      
+
       // Shuffle options
       const shuffledOptions = shuffleArray([...optionsWithIndex]);
-      
+
       // Update the question object with shuffled options
-      randomQ.options = shuffledOptions.map(opt => opt.text);
+      randomQ.options = shuffledOptions.map((opt) => opt.text);
       // Update correct answer index based on new option positions
-      randomQ.correct = shuffledOptions.findIndex(opt => opt.isCorrect);
-      
+      randomQ.correct = shuffledOptions.findIndex((opt) => opt.isCorrect);
+
       return randomQ;
     });
-    
+
     // Shuffle the questions themselves
     return shuffleArray(randomizedQuestions);
   }
@@ -121,7 +121,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function startTimer() {
     clearInterval(timerInterval);
-    timer = 20;
+    timer = wpQuizGame.settings.questionTimer;
     timerInterval = setInterval(() => {
       timer--;
       document.querySelector(".timer").textContent = `Time: ${timer}s`;
@@ -187,7 +187,7 @@ document.addEventListener("DOMContentLoaded", function () {
     bonusScreen.classList.add("active");
 
     bonusScore = 0;
-    bonusTimer = 15;
+    bonusTimer = wpQuizGame.settings.bonusTimer;
     updateBonusUI();
     startBonusTimer();
     startMoleAnimation();
@@ -195,6 +195,18 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".mole").forEach((mole) => {
       mole.addEventListener("click", handleMoleClick);
     });
+  }
+
+  // Update initial game display
+  function updateGameDisplay() {
+    const gameInfo = document.querySelector(".quiz-header");
+    if (gameInfo) {
+      gameInfo.innerHTML = `
+            <div class="lives">❤️ x ${lives}</div>
+            <div class="timer">Time: ${timer}s</div>
+            <div class="score">Score: ${score}</div>
+        `;
+    }
   }
 
   function startBonusTimer() {
@@ -239,7 +251,8 @@ document.addEventListener("DOMContentLoaded", function () {
       const moles = Array.from(document.querySelectorAll(".mole"));
       while (activeMoles.size < NUM_ACTIVE_MOLES) {
         const availableMoles = moles.filter(
-          (mole) => !Array.from(activeMoles).some((active) => active.element === mole)
+          (mole) =>
+            !Array.from(activeMoles).some((active) => active.element === mole)
         );
 
         if (availableMoles.length === 0) break;
@@ -266,7 +279,10 @@ document.addEventListener("DOMContentLoaded", function () {
   function handleMoleClick(event) {
     const mole = event.target;
     if (mole.classList.contains("active")) {
-      bonusScore += 10;
+      // Ensure bonus score is handled as a number
+      bonusScore =
+        parseInt(bonusScore || 0) +
+        parseInt(wpQuizGame.settings.bonusScore || 10);
       updateBonusUI();
       mole.classList.remove("active");
 
@@ -287,18 +303,21 @@ document.addEventListener("DOMContentLoaded", function () {
     clearInterval(bonusTimerInterval);
     clearInterval(moleInterval);
 
-    // Update final score with bonus points
-    score += bonusScore;
+    // Ensure all numbers are properly parsed as integers
+    const quizScore = parseInt(score) || 0;
+    const bonusPoints = parseInt(bonusScore) || 0;
+
+    // Calculate final score using mathematical addition
+    score = quizScore + bonusPoints;
 
     // Show final screen
     bonusScreen.classList.remove("active");
     endScreen.classList.add("active");
 
+    // Format the scores with thousands separators for display
     document.getElementById(
       "final-score"
-    ).textContent = `Final Score: ${score} (Quiz: ${
-      score - bonusScore
-    }, Bonus: ${bonusScore})`;
+    ).textContent = `Final Score: ${score.toLocaleString()} (Quiz: ${quizScore.toLocaleString()}, Bonus: ${bonusPoints.toLocaleString()})`;
 
     // Save final score to database
     const formData = new FormData();
@@ -325,8 +344,8 @@ document.addEventListener("DOMContentLoaded", function () {
     currentQuestion = 0;
     score = 0;
     bonusScore = 0;
-    lives = 3;
-    timer = 20;
+    lives = wpQuizGame.settings.lives;
+    timer = wpQuizGame.settings.questionTimer;
     isAnswered = false;
     randomizedQuestions = [];
 

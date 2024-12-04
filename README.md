@@ -1,2 +1,0 @@
-# wp-jhb-quiz-game
- 

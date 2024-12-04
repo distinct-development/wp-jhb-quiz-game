@@ -1,9 +1,16 @@
 <?php
 /*
-Plugin Name: WordPress JHB Quiz
+Plugin Name: Joburg Meet-up Quiz
 Description: An interactive quiz plugin with leaderboard functionality
-Version: 1.0
+Version: 1.1.0
 Author: Distinct
+Author URI: https://distinct.africa
+Requires at least: 6.0
+Tested up to: 6.7.1
+Stable tag: 1.1.0
+Requires PHP: 7.4
+License: GPL-2.0+
+License URI: http://www.gnu.org/licenses/gpl-2.0.txt
 */
 
 // Prevent direct access to this file
@@ -12,9 +19,10 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin activation hook
-register_activation_hook(__FILE__, 'wp_jhb_quiz_activate');
+register_activation_hook(__FILE__, 'distinct_jhb_quiz_activate');
 
-function wp_jhb_quiz_activate() {
+function distinct_jhb_quiz_activate()
+{
     global $wpdb;
     $charset_collate = $wpdb->get_charset_collate();
 
@@ -45,29 +53,60 @@ function wp_jhb_quiz_activate() {
     ) $charset_collate;";
 
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    
+
     // Execute each CREATE TABLE query separately
     dbDelta($sql_results);
     dbDelta($sql_stats);
+
+    // Set up cache group
+    wp_cache_add_global_groups('distinct_jhb_quiz');
 }
 
 // Enqueue scripts and styles
-add_action('wp_enqueue_scripts', 'wp_jhb_quiz_enqueue_scripts');
+add_action('wp_enqueue_scripts', 'distinct_jhb_quiz_enqueue_scripts');
 
-function wp_jhb_quiz_enqueue_scripts() {
-    wp_enqueue_style('wp-jhb-quiz-style', plugins_url('css/quiz-style.css', __FILE__));
-    wp_enqueue_script('wp-jhb-quiz-script', plugins_url('js/quiz-script.js', __FILE__), array('jquery'), '1.0', true);
-    
+// Add a cache cleanup function for deactivation
+register_deactivation_hook(__FILE__, 'distinct_jhb_quiz_deactivate');
+
+function distinct_jhb_quiz_deactivate()
+{
+    // Clean up all plugin-related caches
+    wp_cache_flush();
+}
+
+function distinct_jhb_quiz_enqueue_scripts()
+{
+    // Get plugin data for version tracking
+    $plugin_data = get_file_data(__FILE__, array('Version' => 'Version'), 'plugin');
+    $version = $plugin_data['Version'] ? $plugin_data['Version'] : '1.0';
+
+    // Enqueue style with version parameter
+    wp_enqueue_style(
+        'distinct-jhb-quiz-style',
+        plugins_url('css/quiz-style.css', __FILE__),
+        array(),  // no dependencies
+        $version  // add version number for cache busting
+    );
+
+    wp_enqueue_script(
+        'distinct-jhb-quiz-script',
+        plugins_url('js/quiz-script.js', __FILE__),
+        array('jquery'),
+        $version,  // use same version for script
+        true
+    );
+
     // Pass data to JavaScript
-    wp_localize_script('wp-jhb-quiz-script', 'wpQuizGame', array(
+    wp_localize_script('distinct-jhb-quiz-script', 'wpQuizGame', array(
         'ajaxurl' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('wp_jhb_quiz_nonce'),
+        'nonce' => wp_create_nonce('distinct_jhb_quiz_nonce'),
         'questions' => get_quiz_questions()
     ));
 }
 
 // Get quiz questions
-function get_quiz_questions() {
+function get_quiz_questions()
+{
     return array(
         array(
             'question' => 'What is WordPress primarily used for?',
@@ -194,19 +233,20 @@ function get_quiz_questions() {
 
 
 
-function wp_jhb_quiz_settings_page() {
+function distinct_jhb_quiz_settings_page()
+{
     // Get current setting
-    $current_range = get_option('wp_jhb_quiz_leaderboard_range', 'all');
-    ?>
+    $current_range = get_option('distinct_jhb_quiz_leaderboard_range', 'all');
+?>
     <div class="wrap">
         <h1>Leaderboard Settings</h1>
         <form method="post" action="options.php">
-            <?php settings_fields('wp_jhb_quiz_options'); ?>
+            <?php settings_fields('distinct_jhb_quiz_options'); ?>
             <table class="form-table">
                 <tr>
                     <th scope="row">Leaderboard Date Range</th>
                     <td>
-                        <select name="wp_jhb_quiz_leaderboard_range">
+                        <select name="distinct_jhb_quiz_leaderboard_range">
                             <option value="day" <?php selected($current_range, 'day'); ?>>Today Only</option>
                             <option value="week" <?php selected($current_range, 'week'); ?>>This Week</option>
                             <option value="month" <?php selected($current_range, 'month'); ?>>This Month</option>
@@ -219,63 +259,105 @@ function wp_jhb_quiz_settings_page() {
             <?php submit_button(); ?>
         </form>
     </div>
-    <?php
+<?php
 }
 
 
 
 // Modify the leaderboard query to respect the date range setting
-function wp_jhb_quiz_get_date_range_condition() {
-    $range = get_option('wp_jhb_quiz_leaderboard_range', 'all');
+function distinct_jhb_quiz_get_date_range_condition()
+{
+    global $wpdb;
+    $range = get_option('distinct_jhb_quiz_leaderboard_range', 'all');
     $current_time = current_time('mysql');
-    
+
     switch ($range) {
         case 'day':
-            return "DATE(last_attempt_time) = DATE('$current_time')";
+            return $wpdb->prepare(
+                "last_attempt_time >= %s AND last_attempt_time < %s",
+                array(
+                    gmdate('Y-m-d 00:00:00', strtotime($current_time)),
+                    gmdate('Y-m-d 23:59:59', strtotime($current_time))
+                )
+            );
         case 'week':
-            return "YEARWEEK(last_attempt_time) = YEARWEEK('$current_time')";
+            return $wpdb->prepare(
+                "YEARWEEK(last_attempt_time, 1) = YEARWEEK(%s, 1)",
+                $current_time
+            );
         case 'month':
-            return "YEAR(last_attempt_time) = YEAR('$current_time') AND MONTH(last_attempt_time) = MONTH('$current_time')";
+            return $wpdb->prepare(
+                "YEAR(last_attempt_time) = YEAR(%s) AND MONTH(last_attempt_time) = MONTH(%s)",
+                $current_time,
+                $current_time
+            );
         default:
-            return "1=1"; // All time
+            return $wpdb->prepare("1=%d", 1); // Properly prepared, even for a constant condition
     }
 }
 
 // Add shortcodes for quiz and leaderboard
-add_shortcode('wp_jhb_quiz', 'wp_jhb_quiz_shortcode');
-add_shortcode('wp_jhb_leaderboard', 'wp_jhb_leaderboard_shortcode');
+add_shortcode('distinct_jhb_quiz', 'distinct_jhb_quiz_shortcode');
+add_shortcode('distinct_jhb_leaderboard', 'distinct_jhb_leaderboard_shortcode');
+
+function distinct_jhb_quiz_db_operation($cache_key, $callback, $cache_group = 'distinct_jhb_quiz', $cache_time = 300) {
+    $result = wp_cache_get($cache_key, $cache_group);
+    
+    if (false === $result) {
+        $result = $callback();
+        if ($result !== false) {
+            wp_cache_set($cache_key, $result, $cache_group, $cache_time);
+        }
+    }
+    
+    return $result;
+}
 
 // Update the leaderboard shortcode function
-function wp_jhb_leaderboard_shortcode() {
+function distinct_jhb_leaderboard_shortcode()
+{
     global $wpdb;
-    $stats_table = $wpdb->prefix . 'quiz_player_stats';
-    $date_condition = wp_jhb_quiz_get_date_range_condition();
+    $date_condition = distinct_jhb_quiz_get_date_range_condition();
     
-    // Get top 20 players by highest score within the selected date range
-    $leaderboard = $wpdb->get_results(
-        "SELECT 
-            first_name,
-            last_name,
-            highest_score,
-            ROUND(average_score, 1) as average_score,
-            last_attempt_score,
-            total_attempts,
-            last_attempt_time
-        FROM $stats_table 
-        WHERE $date_condition
-        ORDER BY highest_score DESC, average_score DESC"
-    );
+    // Create a unique cache key based on the date condition
+    $cache_key = 'quiz_leaderboard_' . md5($date_condition);
     
+    // Try to get cached leaderboard data
+    $leaderboard = wp_cache_get($cache_key, 'distinct_jhb_quiz');
+    
+    if (false === $leaderboard) {
+        // The date condition is already prepared from distinct_jhb_quiz_get_date_range_condition()
+        $leaderboard = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT 
+                    first_name,
+                    last_name,
+                    highest_score,
+                    ROUND(average_score, 1) as average_score,
+                    last_attempt_score,
+                    total_attempts,
+                    last_attempt_time
+                FROM {$wpdb->prefix}quiz_player_stats 
+                WHERE %s  
+                ORDER BY highest_score DESC, average_score DESC",
+                // Remove the prepare() from the condition since we're preparing it here
+                str_replace('%', '%%', $date_condition)
+            )
+        );
+        
+        // Cache the results
+        wp_cache_set($cache_key, $leaderboard, 'distinct_jhb_quiz', 300);
+    }
     // Get the current range setting for display
     $range_text = array(
         'day' => 'Today',
         'week' => 'This Week',
         'month' => 'This Month',
         'all' => 'All Time'
-    )[get_option('wp_jhb_quiz_leaderboard_range', 'all')];
-    
+    )[get_option('distinct_jhb_quiz_leaderboard_range', 'all')];
+
     ob_start();
-    ?>
+?>
     <div class="wp-quiz-leaderboard">
         <h2>WordPress Quiz Leaderboard (<?php echo esc_html($range_text); ?>)</h2>
         <div class="leaderboard-table-container">
@@ -299,24 +381,24 @@ function wp_jhb_leaderboard_shortcode() {
                     <?php else: ?>
                         <?php foreach ($leaderboard as $index => $player): ?>
                             <tr>
-                                <td class="rank"><?php echo $index + 1; ?></td>
+                                <td class="rank"><?php echo esc_html($index + 1); ?></td>
                                 <td class="player-name">
                                     <?php echo esc_html($player->first_name . ' ' . $player->last_name); ?>
                                 </td>
                                 <td class="highest-score">
-                                    <?php echo number_format($player->highest_score); ?>
+                                    <?php echo esc_html(number_format($player->highest_score)); ?>
                                 </td>
                                 <td class="average-score">
-                                    <?php echo number_format($player->average_score, 1); ?>
+                                    <?php echo esc_html(number_format($player->average_score, 1)); ?>
                                 </td>
                                 <td class="recent-score">
-                                    <?php echo number_format($player->last_attempt_score); ?>
+                                    <?php echo esc_html(number_format($player->last_attempt_score)); ?>
                                 </td>
                                 <td class="attempts">
-                                    <?php echo number_format($player->total_attempts); ?>
+                                    <?php echo esc_html(number_format($player->total_attempts)); ?>
                                 </td>
                                 <td class="last-played">
-                                    <?php echo human_time_diff(strtotime($player->last_attempt_time), current_time('timestamp')); ?> ago
+                                    <?php echo esc_html(human_time_diff(strtotime($player->last_attempt_time), current_time('timestamp'))); ?> ago
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -325,13 +407,14 @@ function wp_jhb_leaderboard_shortcode() {
             </table>
         </div>
     </div>
-    <?php
+<?php
     return ob_get_clean();
 }
 
-function wp_jhb_quiz_shortcode() {
+function distinct_jhb_quiz_shortcode()
+{
     ob_start();
-    ?>
+?>
     <div id="wp-quiz-game-container" class="wp-quiz-container">
         <div id="quiz-start-screen" class="quiz-screen active">
             <h2>WordPress Quiz</h2>
@@ -339,9 +422,9 @@ function wp_jhb_quiz_shortcode() {
                 <input type="text" id="first-name" placeholder="First Name" />
                 <input type="text" id="last-name" placeholder="Last Name" />
             </div>
-            <p class="description">Your name and surname are used to uniquely identify you and are displayed publically on the <a href="<?php echo site_url('/leaderboard/'); ?>">quiz leaderboard</a>.</p>
+            <p class="description">Your name and surname are used to uniquely identify you and are displayed publically on the <a href="<?php echo esc_url(site_url('/leaderboard/')); ?>">quiz leaderboard</a>.</p>
             <button id="start-quiz" class="quiz-button">Begin</button><br><br>
-            <a href="<?php echo site_url('/leaderboard/'); ?>">View Leaderboard</a>
+            <a href="<?php echo esc_url(site_url('/leaderboard/')); ?>">View Leaderboard</a>
         </div>
         <div id="quiz-game-screen" class="quiz-screen">
             <!-- Quiz content will be dynamically inserted here -->
@@ -354,28 +437,60 @@ function wp_jhb_quiz_shortcode() {
             </div>
             <div class="mole-container">
                 <div class="mole-row">
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
                 </div>
                 <div class="mole-row">
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
                 </div>
                 <div class="mole-row">
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
                 </div>
                 <div class="mole-row">
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
-                    <div class="mole-hole"><div class="mole"></div></div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
+                    <div class="mole-hole">
+                        <div class="mole"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -383,117 +498,152 @@ function wp_jhb_quiz_shortcode() {
             <h2>Game Complete!</h2>
             <div id="final-score"></div>
             <button id="restart-quiz" class="quiz-button">Play Again</button><br><br>
-            <a href="<?php echo site_url('/leaderboard/'); ?>">View Leaderboard</a>
+            <a href="<?php echo esc_url(site_url('/leaderboard/')); ?>">View Leaderboard</a>
         </div>
     </div>
-    <?php
+<?php
     return ob_get_clean();
 }
 
 // Handle AJAX requests
-add_action('wp_ajax_save_quiz_stats', 'wp_jhb_quiz_save_stats');
-add_action('wp_ajax_nopriv_save_quiz_stats', 'wp_jhb_quiz_save_stats');
+add_action('wp_ajax_save_quiz_stats', 'distinct_jhb_quiz_save_stats');
+add_action('wp_ajax_nopriv_save_quiz_stats', 'distinct_jhb_quiz_save_stats');
 
-function wp_jhb_quiz_save_stats() {
-    check_ajax_referer('wp_jhb_quiz_nonce', 'nonce');
+function distinct_jhb_quiz_save_stats() {
+    check_ajax_referer('distinct_jhb_quiz_nonce', 'nonce');
+
+    if (!isset($_POST['player_id'], $_POST['first_name'], $_POST['last_name'], $_POST['score'])) {
+        wp_send_json_error(array('message' => 'Missing required fields'));
+        return;
+    }
 
     global $wpdb;
-    $results_table = $wpdb->prefix . 'quiz_results';
-    $stats_table = $wpdb->prefix . 'quiz_player_stats';
-
-    $player_id = sanitize_text_field($_POST['player_id']);
-    $first_name = sanitize_text_field($_POST['first_name']);
-    $last_name = sanitize_text_field($_POST['last_name']);
-    $score = intval($_POST['score']);
+    
+    // Properly unslash and sanitize input
+    $player_id = sanitize_text_field(wp_unslash($_POST['player_id']));
+    $first_name = sanitize_text_field(wp_unslash($_POST['first_name']));
+    $last_name = sanitize_text_field(wp_unslash($_POST['last_name']));
+    $score = absint(wp_unslash($_POST['score']));
 
     // Begin transaction
     $wpdb->query('START TRANSACTION');
 
     try {
-        // Insert new result
-        $wpdb->insert(
-            $results_table,
-            array(
-                'player_id' => $player_id,
-                'first_name' => $first_name,
-                'last_name' => $last_name,
-                'score' => $score
-            ),
-            array('%s', '%s', '%s', '%d')
+        // Insert new result using callback
+        $insert_result = distinct_jhb_quiz_db_operation(
+            'quiz_insert_' . $player_id,
+            function() use ($wpdb, $player_id, $first_name, $last_name, $score) {
+                return $wpdb->insert(
+                    $wpdb->prefix . 'quiz_results',
+                    array(
+                        'player_id' => $player_id,
+                        'first_name' => $first_name,
+                        'last_name' => $last_name,
+                        'score' => $score
+                    ),
+                    array('%s', '%s', '%s', '%d')
+                );
+            }
         );
 
-        // Calculate updated statistics
-        $stats = $wpdb->get_row($wpdb->prepare(
-            "SELECT 
-                COUNT(*) as total_attempts,
-                MAX(score) as highest_score,
-                AVG(score) as average_score
-            FROM $results_table 
-            WHERE player_id = %s",
-            $player_id
-        ));
+        // Get player stats using callback
+        $stats = distinct_jhb_quiz_db_operation(
+            'quiz_player_stats_' . $player_id,
+            function() use ($wpdb, $player_id) {
+                return $wpdb->get_row($wpdb->prepare(
+                    "SELECT 
+                        COUNT(*) as total_attempts,
+                        MAX(score) as highest_score,
+                        AVG(score) as average_score
+                    FROM {$wpdb->prefix}quiz_results 
+                    WHERE player_id = %s",
+                    $player_id
+                ));
+            }
+        );
 
-        // Update or insert player statistics
-        $wpdb->replace(
-            $stats_table,
-            array(
-                'player_id' => $player_id,
-                'first_name' => $first_name,
-                'last_name' => $last_name,
-                'highest_score' => max($stats->highest_score, $score),
-                'average_score' => $stats->average_score,
-                'total_attempts' => $stats->total_attempts,
-                'last_attempt_score' => $score,
-                'last_attempt_time' => current_time('mysql')
-            ),
-            array('%s', '%s', '%s', '%d', '%f', '%d', '%d', '%s')
+        // Update player statistics
+        $update_result = distinct_jhb_quiz_db_operation(
+            'quiz_update_' . $player_id,
+            function() use ($wpdb, $player_id, $first_name, $last_name, $score, $stats) {
+                return $wpdb->replace(
+                    $wpdb->prefix . 'quiz_player_stats',
+                    array(
+                        'player_id' => $player_id,
+                        'first_name' => $first_name,
+                        'last_name' => $last_name,
+                        'highest_score' => max($stats->highest_score, $score),
+                        'average_score' => $stats->average_score,
+                        'total_attempts' => $stats->total_attempts,
+                        'last_attempt_score' => $score,
+                        'last_attempt_time' => current_time('mysql')
+                    ),
+                    array('%s', '%s', '%s', '%d', '%f', '%d', '%d', '%s')
+                );
+            }
         );
 
         $wpdb->query('COMMIT');
+
+        // Clear caches
+        wp_cache_delete('quiz_player_stats_' . $player_id, 'distinct_jhb_quiz');
+        wp_cache_delete('quiz_leaderboard_' . md5(distinct_jhb_quiz_get_date_range_condition()), 'distinct_jhb_quiz');
+
         wp_send_json_success(array('message' => 'Score saved successfully'));
     } catch (Exception $e) {
         $wpdb->query('ROLLBACK');
         wp_send_json_error(array('message' => 'Error saving score'));
     }
 }
-
 // Add admin menu
-add_action('admin_menu', 'wp_jhb_quiz_admin_menu');
+add_action('admin_menu', 'distinct_jhb_quiz_admin_menu');
 
 // Modify the existing admin menu function
-function wp_jhb_quiz_admin_menu() {
+function distinct_jhb_quiz_admin_menu()
+{
     // Add main menu page
     add_menu_page(
         'WordPress JHB Quiz',
         'JHB Quiz',
         'manage_options',
-        'wp-jhb-quiz',
-        'wp_jhb_quiz_admin_page',
+        'distinct-jhb-quiz',
+        'distinct_jhb_quiz_admin_page',
         'dashicons-games'
     );
 
     // Add settings submenu
     add_submenu_page(
-        'wp-jhb-quiz',                // Parent slug
+        'distinct-jhb-quiz',                // Parent slug
         'Leaderboard Settings',       // Page title
         'Settings',                   // Menu title
         'manage_options',             // Capability
-        'wp-jhb-quiz-settings',       // Menu slug
-        'wp_jhb_quiz_settings_page'   // Function
+        'distinct-jhb-quiz-settings',       // Menu slug
+        'distinct_jhb_quiz_settings_page'   // Function
     );
 
     // Register settings
-    register_setting('wp_jhb_quiz_options', 'wp_jhb_quiz_leaderboard_range');
+    register_setting('distinct_jhb_quiz_options', 'distinct_jhb_quiz_leaderboard_range');
 }
 
-function wp_jhb_quiz_admin_page() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'quiz_results';
-    $results = $wpdb->get_results("SELECT * FROM $table_name ORDER BY score DESC LIMIT 20");
-    
-    ?>
+function distinct_jhb_quiz_admin_page()
+{
+    $results = distinct_jhb_quiz_db_operation(
+        'quiz_admin_results',
+        function() {
+            global $wpdb;
+            return $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM {$wpdb->prefix}quiz_results ORDER BY score DESC LIMIT %d",
+                    20
+                )
+            );
+        }
+    );
+
+
+?>
     <div class="wrap">
-        <h1>WordPress JHB Quiz Leaderboard</h1>
+        <h1>Joburg Quiz Leaderboard</h1>
         <table class="wp-list-table widefat fixed striped">
             <thead>
                 <tr>
@@ -504,10 +654,10 @@ function wp_jhb_quiz_admin_page() {
                 </tr>
             </thead>
             <tbody>
-                <?php 
+                <?php
                 foreach ($results as $index => $result) {
                     echo "<tr>";
-                    echo "<td>" . ($index + 1) . "</td>";
+                    echo "<td>" . esc_html($index + 1) . "</td>";
                     echo "<td>" . esc_html($result->first_name . ' ' . $result->last_name) . "</td>";
                     echo "<td>" . esc_html($result->score) . "</td>";
                     echo "<td>" . esc_html($result->completion_time) . "</td>";
@@ -517,5 +667,5 @@ function wp_jhb_quiz_admin_page() {
             </tbody>
         </table>
     </div>
-    <?php
+<?php
 }
